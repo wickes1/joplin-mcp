@@ -1,0 +1,7 @@
+joplin-mcp
+joplin-mcp-*
+.env
+*.exe
+*.test
+.DS_Store
+coverage.out
