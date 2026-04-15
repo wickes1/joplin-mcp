@@ -1,0 +1,49 @@
+package tools
+
+import (
+	"context"
+
+	"github.com/Wickes1/joplin-mcp/joplin"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// RegisterSearchTools registers the search_notes MCP tool onto the server.
+func RegisterSearchTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
+	mcp.AddTool(s, &mcp.Tool{Name: "search_notes", Description: "Full-text search across all notes. Returns preview notes (200 char body preview) and a has_more flag."},
+		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
+			Query string `json:"query"          jsonschema:"description=Search query string,required"`
+			Limit int    `json:"limit,omitempty" jsonschema:"description=Max results (default 20 max 50)"`
+		}) (*mcp.CallToolResult, any, error) {
+			if args.Query == "" {
+				return toolError("query is required", "")
+			}
+
+			limit := args.Limit
+			if limit <= 0 {
+				limit = 20
+			}
+			if limit > 50 {
+				limit = 50
+			}
+
+			resp, err := c.SearchNotes(ctx, args.Query, limit)
+			if err != nil {
+				if ae, ok := err.(*joplin.AgentError); ok {
+					return toolErrorFromAgent(ae)
+				}
+				return toolError(err.Error(), "")
+			}
+
+			previews := make([]joplin.PreviewNote, 0, len(resp.Items))
+			for i := range resp.Items {
+				n := &resp.Items[i]
+				folderTitle := fc.GetTitle(n.ParentID)
+				previews = append(previews, n.ToPreview(folderTitle))
+			}
+
+			return toolSuccess(map[string]any{
+				"notes":    previews,
+				"has_more": resp.HasMore,
+			})
+		})
+}
