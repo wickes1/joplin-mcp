@@ -15,9 +15,9 @@ import (
 func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "list_notes", Description: "List notes, optionally filtered by folder. Returns slim notes and a has_more flag."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			FolderID string `json:"folder_id,omitempty" jsonschema:"description=Filter by folder ID (optional)"`
-			Limit    int    `json:"limit,omitempty"    jsonschema:"description=Max results per page (default 20 max 100)"`
-			Page     int    `json:"page,omitempty"     jsonschema:"description=Page number 1-indexed (default 1)"`
+			FolderID string `json:"folder_id,omitempty" jsonschema:"Filter by folder ID (optional)"`
+			Limit    int    `json:"limit,omitempty"    jsonschema:"Max results per page (default 20 max 100)"`
+			Page     int    `json:"page,omitempty"     jsonschema:"Page number 1-indexed (default 1)"`
 		}) (*mcp.CallToolResult, any, error) {
 			limit := args.Limit
 			if limit <= 0 {
@@ -54,7 +54,7 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_note", Description: "Get a single note by ID with full body and tags."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			NoteID string `json:"note_id" jsonschema:"description=The note ID to retrieve,required"`
+			NoteID string `json:"note_id" jsonschema:"The note ID to retrieve"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.NoteID == "" {
 				return toolError("note_id is required", "")
@@ -84,7 +84,7 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_notes", Description: "Batch-read up to 50 notes by ID. Failed lookups are included as error entries."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			NoteIDs []string `json:"note_ids" jsonschema:"description=List of note IDs to fetch (max 50),required"`
+			NoteIDs []string `json:"note_ids" jsonschema:"List of note IDs to fetch (max 50)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if len(args.NoteIDs) == 0 {
 				return toolError("note_ids is required and must not be empty", "")
@@ -151,12 +151,12 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "create_note", Description: "Create a new note. Optionally auto-create folder by name and apply tags."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			Title      string   `json:"title"                  jsonschema:"description=Note title,required"`
-			Body       string   `json:"body,omitempty"         jsonschema:"description=Note body in Markdown"`
-			FolderID   string   `json:"folder_id,omitempty"    jsonschema:"description=Destination folder ID"`
-			FolderName string   `json:"folder_name,omitempty"  jsonschema:"description=Destination folder name (auto-creates if not found)"`
-			IsTodo     bool     `json:"is_todo,omitempty"      jsonschema:"description=Whether the note is a to-do item"`
-			TagNames   []string `json:"tag_names,omitempty"    jsonschema:"description=Tag names to apply (auto-creates missing tags)"`
+			Title      string   `json:"title"                  jsonschema:"Note title"`
+			Body       string   `json:"body,omitempty"         jsonschema:"Note body in Markdown"`
+			FolderID   string   `json:"folder_id,omitempty"    jsonschema:"Destination folder ID"`
+			FolderName string   `json:"folder_name,omitempty"  jsonschema:"Destination folder name (auto-creates if not found)"`
+			IsTodo     bool     `json:"is_todo,omitempty"      jsonschema:"Whether the note is a to-do item"`
+			TagNames   []string `json:"tag_names,omitempty"    jsonschema:"Tag names to apply (auto-creates missing tags)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.Title == "" {
 				return toolError("title is required", "")
@@ -240,12 +240,12 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "update_note", Description: "Update an existing note's title, body, folder, or to-do status. folder_name lookup only — use create_folder first if the folder doesn't exist."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			NoteID     string  `json:"note_id"               jsonschema:"description=The note ID to update,required"`
-			Title      *string `json:"title,omitempty"       jsonschema:"description=New title"`
-			Body       *string `json:"body,omitempty"        jsonschema:"description=New body in Markdown"`
-			FolderID   *string `json:"folder_id,omitempty"   jsonschema:"description=New folder ID"`
-			FolderName string  `json:"folder_name,omitempty" jsonschema:"description=New folder name (must already exist — will not auto-create)"`
-			IsTodo     *bool   `json:"is_todo,omitempty"     jsonschema:"description=Set to-do status"`
+			NoteID     string  `json:"note_id"               jsonschema:"The note ID to update"`
+			Title      *string `json:"title,omitempty"       jsonschema:"New title"`
+			Body       *string `json:"body,omitempty"        jsonschema:"New body in Markdown"`
+			FolderID   *string `json:"folder_id,omitempty"   jsonschema:"New folder ID"`
+			FolderName string  `json:"folder_name,omitempty" jsonschema:"New folder name (must already exist — will not auto-create)"`
+			IsTodo     *bool   `json:"is_todo,omitempty"     jsonschema:"Set to-do status"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.NoteID == "" {
 				return toolError("note_id is required", "")
@@ -297,8 +297,8 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_note", Description: "Delete a note by ID. By default moves to trash; set permanent=true to bypass trash."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			NoteID    string `json:"note_id"              jsonschema:"description=The note ID to delete,required"`
-			Permanent bool   `json:"permanent,omitempty"  jsonschema:"description=If true bypass trash and delete permanently (default false)"`
+			NoteID    string `json:"note_id"              jsonschema:"The note ID to delete"`
+			Permanent bool   `json:"permanent,omitempty"  jsonschema:"If true bypass trash and delete permanently (default false)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.NoteID == "" {
 				return toolError("note_id is required", "")

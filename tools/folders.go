@@ -26,8 +26,8 @@ func RegisterFolderTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "create_folder", Description: "Create a new folder, optionally nested under a parent folder."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			Title    string `json:"title"              jsonschema:"description=Folder name,required"`
-			ParentID string `json:"parent_id,omitempty" jsonschema:"description=Parent folder ID (optional — omit for top-level)"`
+			Title    string `json:"title"              jsonschema:"Folder name"`
+			ParentID string `json:"parent_id,omitempty" jsonschema:"Parent folder ID (optional — omit for top-level)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.Title == "" {
 				return toolError("title is required", "")
@@ -69,8 +69,8 @@ func RegisterFolderTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_folder", Description: "Delete a folder by ID. By default moves to trash; set permanent=true to bypass trash."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			FolderID  string `json:"folder_id"            jsonschema:"description=The folder ID to delete,required"`
-			Permanent bool   `json:"permanent,omitempty"  jsonschema:"description=If true bypass trash and delete permanently (default false)"`
+			FolderID  string `json:"folder_id"            jsonschema:"The folder ID to delete"`
+			Permanent bool   `json:"permanent,omitempty"  jsonschema:"If true bypass trash and delete permanently (default false)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.FolderID == "" {
 				return toolError("folder_id is required", "")

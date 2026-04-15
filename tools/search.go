@@ -11,8 +11,8 @@ import (
 func RegisterSearchTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "search_notes", Description: "Full-text search across all notes. Returns preview notes (200 char body preview) and a has_more flag."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			Query string `json:"query"          jsonschema:"description=Search query string,required"`
-			Limit int    `json:"limit,omitempty" jsonschema:"description=Max results (default 20 max 50)"`
+			Query string `json:"query"          jsonschema:"Search query string"`
+			Limit int    `json:"limit,omitempty" jsonschema:"Max results (default 20 max 50)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.Query == "" {
 				return toolError("query is required", "")

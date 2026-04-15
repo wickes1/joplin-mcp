@@ -24,8 +24,8 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "tag_note", Description: "Apply a tag to a note. Creates the tag if it does not exist (case-insensitive lookup)."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			TagName string `json:"tag_name" jsonschema:"description=Tag name to apply (case-insensitive; created if missing),required"`
-			NoteID  string `json:"note_id"  jsonschema:"description=Note ID to tag,required"`
+			TagName string `json:"tag_name" jsonschema:"Tag name to apply (case-insensitive; created if missing)"`
+			NoteID  string `json:"note_id"  jsonschema:"Note ID to tag"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.TagName == "" {
 				return toolError("tag_name is required", "")
@@ -71,8 +71,8 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "untag_note", Description: "Remove a tag from a note (case-insensitive tag lookup)."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			TagName string `json:"tag_name" jsonschema:"description=Tag name to remove (case-insensitive),required"`
-			NoteID  string `json:"note_id"  jsonschema:"description=Note ID to untag,required"`
+			TagName string `json:"tag_name" jsonschema:"Tag name to remove (case-insensitive)"`
+			NoteID  string `json:"note_id"  jsonschema:"Note ID to untag"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.TagName == "" {
 				return toolError("tag_name is required", "")
@@ -112,7 +112,7 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_tag", Description: "Delete a tag by ID. This removes the tag from all notes."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			TagID string `json:"tag_id" jsonschema:"description=The tag ID to delete,required"`
+			TagID string `json:"tag_id" jsonschema:"The tag ID to delete"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.TagID == "" {
 				return toolError("tag_id is required", "")
@@ -132,9 +132,9 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_notes_by_tag", Description: "Get notes associated with a tag name (case-insensitive). Returns slim notes and a has_more flag."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			TagName string `json:"tag_name"        jsonschema:"description=Tag name to look up (case-insensitive),required"`
-			Limit   int    `json:"limit,omitempty"  jsonschema:"description=Max results per page (default 20)"`
-			Page    int    `json:"page,omitempty"   jsonschema:"description=Page number 1-indexed (default 1)"`
+			TagName string `json:"tag_name"        jsonschema:"Tag name to look up (case-insensitive)"`
+			Limit   int    `json:"limit,omitempty"  jsonschema:"Max results per page (default 20)"`
+			Page    int    `json:"page,omitempty"   jsonschema:"Page number 1-indexed (default 1)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.TagName == "" {
 				return toolError("tag_name is required", "")

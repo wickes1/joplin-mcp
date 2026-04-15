@@ -12,8 +12,8 @@ import (
 func RegisterAppendTool(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "append_to_note", Description: "Append content to an existing note (read-modify-write). A newline is inserted between existing body and new content."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			NoteID  string `json:"note_id" jsonschema:"description=The note ID to append to,required"`
-			Content string `json:"content" jsonschema:"description=Content to append to the note body,required"`
+			NoteID  string `json:"note_id" jsonschema:"The note ID to append to"`
+			Content string `json:"content" jsonschema:"Content to append to the note body"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.NoteID == "" {
 				return toolError("note_id is required", "")

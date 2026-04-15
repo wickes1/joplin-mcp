@@ -16,10 +16,10 @@ import (
 func RegisterUtilityTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "import_markdown", Description: "Import a Markdown (.md) file into Joplin as a note. Title is extracted from the first '# ' heading or the filename."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
-			FilePath   string   `json:"file_path"              jsonschema:"description=Absolute path to the .md file to import,required"`
-			FolderID   string   `json:"folder_id,omitempty"    jsonschema:"description=Destination folder ID"`
-			FolderName string   `json:"folder_name,omitempty"  jsonschema:"description=Destination folder name (auto-creates if not found)"`
-			TagNames   []string `json:"tag_names,omitempty"    jsonschema:"description=Tag names to apply (auto-creates missing tags)"`
+			FilePath   string   `json:"file_path"              jsonschema:"Absolute path to the .md file to import"`
+			FolderID   string   `json:"folder_id,omitempty"    jsonschema:"Destination folder ID"`
+			FolderName string   `json:"folder_name,omitempty"  jsonschema:"Destination folder name (auto-creates if not found)"`
+			TagNames   []string `json:"tag_names,omitempty"    jsonschema:"Tag names to apply (auto-creates missing tags)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.FilePath == "" {
 				return toolError("file_path is required", "")
