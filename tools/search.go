@@ -8,11 +8,12 @@ import (
 )
 
 // RegisterSearchTools registers the search_notes MCP tool onto the server.
-func RegisterSearchTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
+func RegisterSearchTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "search_notes", Description: "Full-text search across all notes. Returns preview notes (200 char body preview) and a has_more flag."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
 			Query string `json:"query"          jsonschema:"Search query string"`
 			Limit int    `json:"limit,omitempty" jsonschema:"Max results (default 20 max 50)"`
+			Page  int    `json:"page,omitempty"  jsonschema:"Page number 1-indexed (default 1)"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.Query == "" {
 				return toolError("query is required", "")
@@ -26,12 +27,14 @@ func RegisterSearchTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 				limit = 50
 			}
 
-			resp, err := c.SearchNotes(ctx, args.Query, 1, limit)
+			page := args.Page
+			if page <= 0 {
+				page = 1
+			}
+
+			resp, err := c.SearchNotes(ctx, args.Query, page, limit)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			previews := make([]joplin.PreviewNote, 0, len(resp.Items))
