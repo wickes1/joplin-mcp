@@ -30,12 +30,19 @@ func FolderNotFound(id string) *AgentError {
 	}
 }
 
-// FolderNameNotFound returns an AgentError for a missing folder by name
-// (used in update_note context where auto-create is not allowed).
+// FolderNameNotFound returns an AgentError for a missing folder by name.
 func FolderNameNotFound(name string) *AgentError {
 	return &AgentError{
 		ErrorMsg: fmt.Sprintf("Folder %q not found.", name),
-		Hint:     "Use create_folder to create it first, then retry update_note.",
+		Hint:     "create_note, update_note, and import_markdown auto-create folders when using folder_name. batch_move_notes requires an existing folder. Use list_folders to see available folders.",
+	}
+}
+
+// ResourceNotFound returns an AgentError for a missing resource by ID.
+func ResourceNotFound(id string) *AgentError {
+	return &AgentError{
+		ErrorMsg: fmt.Sprintf("Resource %s not found.", id),
+		Hint:     "Use list_resources to see available resource IDs.",
 	}
 }
 

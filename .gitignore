@@ -5,3 +5,4 @@ joplin-mcp-*
 *.test
 .DS_Store
 coverage.out
+.mcp.json

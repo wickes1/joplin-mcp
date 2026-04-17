@@ -8,16 +8,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// RegisterFolderTools registers the 3 folder-related MCP tools onto the server.
-func RegisterFolderTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
+// RegisterFolderTools registers the 4 folder-related MCP tools onto the server.
+func RegisterFolderTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "list_folders", Description: "List all folders as a nested tree with computed paths (e.g. Work/Projects/Q1)."},
 		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 			rawFolders, err := fc.AllFolders()
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			tree := convertFolderTree(rawFolders, "", fc)
@@ -35,10 +32,7 @@ func RegisterFolderTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			folder, err := c.CreateFolder(ctx, args.Title, args.ParentID)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			// Invalidate cache so subsequent operations see the new folder
@@ -77,10 +71,7 @@ func RegisterFolderTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 			}
 
 			if err := c.DeleteFolder(ctx, args.FolderID, args.Permanent); err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			fc.Invalidate()
@@ -90,6 +81,44 @@ func RegisterFolderTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 				msg = fmt.Sprintf("Folder %s permanently deleted.", args.FolderID)
 			}
 			return toolSuccess(map[string]string{"status": msg})
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "update_folder", Description: "Rename or move a folder."},
+		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
+			FolderID string  `json:"folder_id"             jsonschema:"The folder ID to update"`
+			Title    *string `json:"title,omitempty"       jsonschema:"New title"`
+			ParentID *string `json:"parent_id,omitempty"   jsonschema:"New parent folder ID (move)"`
+		}) (*mcp.CallToolResult, any, error) {
+			if args.FolderID == "" {
+				return toolError("folder_id is required", "")
+			}
+			if args.Title == nil && args.ParentID == nil {
+				return toolError("at least one of title or parent_id must be provided", "")
+			}
+
+			params := joplin.FolderUpdateParams{
+				Title:    args.Title,
+				ParentID: args.ParentID,
+			}
+
+			folder, err := c.UpdateFolder(ctx, args.FolderID, params)
+			if err != nil {
+				return handleErr(err)
+			}
+
+			fc.Invalidate()
+
+			path := fc.ComputePath(folder.ID)
+			if path == "" {
+				path = folder.Title
+			}
+
+			return toolSuccess(map[string]any{
+				"id":        folder.ID,
+				"title":     folder.Title,
+				"parent_id": folder.ParentID,
+				"path":      path,
+			})
 		})
 }
 

@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +42,82 @@ func toolSuccess(v any) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// handleErr converts any error into a tool error result, using AgentError formatting when available.
+func handleErr(err error) (*mcp.CallToolResult, any, error) {
+	if ae, ok := err.(*joplin.AgentError); ok {
+		return toolErrorFromAgent(ae)
+	}
+	return toolError(err.Error(), "")
+}
+
+// resolveFolderID resolves a folder from ID, name, or auto-creates one.
+// If both folderID and folderName are empty, returns ("", "", nil).
+func resolveFolderID(ctx context.Context, c joplin.API, fc *FolderCache,
+	folderID, folderName string, autoCreate bool) (string, string, error) {
+	if folderID != "" {
+		title := fc.GetTitle(folderID)
+		return folderID, title, nil
+	}
+	if folderName == "" {
+		return "", "", nil
+	}
+	existing := fc.FindByName(folderName)
+	if existing != nil {
+		return existing.ID, existing.Title, nil
+	}
+	if !autoCreate {
+		return "", "", joplin.FolderNameNotFound(folderName)
+	}
+	newFolder, err := c.CreateFolder(ctx, folderName, "")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create folder %q: %w", folderName, err)
+	}
+	fc.Invalidate()
+	return newFolder.ID, newFolder.Title, nil
+}
+
+// applyTags applies a list of tag names to a note, auto-creating tags as needed.
+// Returns the list of successfully applied tag titles and any warnings.
+func applyTags(ctx context.Context, c joplin.API, noteID string, tagNames []string) ([]string, []string) {
+	if len(tagNames) == 0 {
+		return nil, nil
+	}
+	allTags, err := c.ListTags(ctx)
+	if err != nil {
+		return nil, []string{fmt.Sprintf("failed to list tags: %s", err.Error())}
+	}
+	var applied, warnings []string
+	for _, name := range tagNames {
+		tag := FindTagByName(allTags, name)
+		if tag == nil {
+			newTag, err := c.CreateTag(ctx, name)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to create tag %q: %s", name, err.Error()))
+				continue
+			}
+			tag = newTag
+			allTags = append(allTags, *newTag)
+		}
+		if err := c.TagNote(ctx, tag.ID, noteID); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to apply tag %q: %s", name, err.Error()))
+			continue
+		}
+		applied = append(applied, tag.Title)
+	}
+	return applied, warnings
+}
+
+// validateAbsPath checks that p is an absolute path without ".." components.
+func validateAbsPath(p string) error {
+	if !filepath.IsAbs(p) {
+		return fmt.Errorf("path must be absolute, got %q", p)
+	}
+	if strings.Contains(p, "..") {
+		return fmt.Errorf("path must not contain '..', got %q", p)
+	}
+	return nil
+}
+
 // FindTagByName does a case-insensitive search for a tag by name.
 // Returns nil if not found.
 func FindTagByName(tags []joplin.Tag, name string) *joplin.Tag {
@@ -63,12 +141,12 @@ type folderCacheEntry struct {
 // FolderCache is a session-level, thread-safe cache for folder data with a 30s TTL.
 type FolderCache struct {
 	mu     sync.RWMutex
-	client *joplin.Client
+	client joplin.API
 	entry  *folderCacheEntry
 }
 
-// NewFolderCache creates a new FolderCache backed by the given client.
-func NewFolderCache(client *joplin.Client) *FolderCache {
+// NewFolderCache creates a new FolderCache backed by the given API client.
+func NewFolderCache(client joplin.API) *FolderCache {
 	return &FolderCache{client: client}
 }
 
