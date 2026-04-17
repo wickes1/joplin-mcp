@@ -93,12 +93,12 @@ func RegisterResourceTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			}
 
 			// Ensure parent directory exists
-			if err := os.MkdirAll(filepath.Dir(args.OutputPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(args.OutputPath), 0700); err != nil {
 				return toolError(fmt.Sprintf("failed to create output directory: %s", err.Error()), "")
 			}
 
 			// Write to disk
-			if err := os.WriteFile(args.OutputPath, data, 0644); err != nil {
+			if err := os.WriteFile(args.OutputPath, data, 0600); err != nil {
 				return toolError(fmt.Sprintf("failed to write file: %s", err.Error()), "Check that the path is writable.")
 			}
 

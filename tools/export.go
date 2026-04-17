@@ -32,7 +32,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			}
 
 			// Ensure output directory exists
-			if err := os.MkdirAll(args.OutputDir, 0755); err != nil {
+			if err := os.MkdirAll(args.OutputDir, 0700); err != nil {
 				return toolError(fmt.Sprintf("failed to create output directory: %s", err.Error()), "")
 			}
 
@@ -73,8 +73,24 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				if args.Flatten || folderTitle == "" {
 					writeDir = args.OutputDir
 				} else {
-					writeDir = filepath.Join(args.OutputDir, filepath.FromSlash(folderPath))
-					if err := os.MkdirAll(writeDir, 0755); err != nil {
+					// Sanitize each component of the folder path to prevent path traversal
+					components := strings.Split(filepath.ToSlash(folderPath), "/")
+					sanitized := make([]string, 0, len(components))
+					for _, c := range components {
+						if s := sanitizeFilename(c); s != "" {
+							sanitized = append(sanitized, s)
+						}
+					}
+					writeDir = filepath.Join(append([]string{args.OutputDir}, sanitized...)...)
+
+					// Verify writeDir stays under output_dir (path traversal guard)
+					cleanBase := filepath.Clean(args.OutputDir)
+					cleanWrite := filepath.Clean(writeDir)
+					if !strings.HasPrefix(cleanWrite+string(os.PathSeparator), cleanBase+string(os.PathSeparator)) {
+						return fmt.Errorf("folder path escapes output_dir: %q", folderPath)
+					}
+
+					if err := os.MkdirAll(writeDir, 0700); err != nil {
 						return fmt.Errorf("failed to create dir %q: %w", writeDir, err)
 					}
 				}
@@ -111,7 +127,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 					content = full.Body
 				}
 
-				if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+				if err := os.WriteFile(filePath, []byte(content), 0600); err != nil {
 					return fmt.Errorf("failed to write %q: %w", filePath, err)
 				}
 				return nil
@@ -310,7 +326,18 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				// Determine parent folder ID
 				parentFolderID := resolveImportFolder(relDir)
 
-				// Read file
+				// Read file (reject files > 50MB)
+				fileInfo, err := os.Stat(path)
+				if err != nil {
+					importErrors = append(importErrors, fmt.Sprintf("failed to stat %q: %s", path, err.Error()))
+					skipped++
+					return nil
+				}
+				if fileInfo.Size() > 50*1024*1024 {
+					importErrors = append(importErrors, fmt.Sprintf("skipping %q: file too large (max 50MB)", path))
+					skipped++
+					return nil
+				}
 				data, err := os.ReadFile(path)
 				if err != nil {
 					importErrors = append(importErrors, fmt.Sprintf("failed to read %q: %s", path, err.Error()))
@@ -373,13 +400,13 @@ func sanitizeFilename(name string) string {
 func buildFrontmatter(note *joplin.Note, folderPath string, tags []string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("joplin_id: %s\n", note.ID))
+	sb.WriteString(fmt.Sprintf("joplin_id: %q\n", note.ID))
 	sb.WriteString(fmt.Sprintf("title: %q\n", note.Title))
 	sb.WriteString(fmt.Sprintf("folder: %q\n", folderPath))
 	if len(tags) > 0 {
 		sb.WriteString("tags:\n")
 		for _, t := range tags {
-			sb.WriteString(fmt.Sprintf("  - %s\n", t))
+			sb.WriteString(fmt.Sprintf("  - %q\n", t))
 		}
 	} else {
 		sb.WriteString("tags: []\n")

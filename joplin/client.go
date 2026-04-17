@@ -119,7 +119,7 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, path string, qu
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
@@ -491,7 +491,7 @@ func (c *Client) CreateResource(ctx context.Context, filePath, title string) (*R
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}

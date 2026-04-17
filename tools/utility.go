@@ -35,6 +35,15 @@ func RegisterUtilityTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				return handleErr(joplin.InvalidFileExtension(ext))
 			}
 
+			// Stat file and reject if > 50MB
+			fileInfo, err := os.Stat(args.FilePath)
+			if err != nil {
+				return toolError(fmt.Sprintf("failed to stat file %q: %s", args.FilePath, err.Error()), "Check that the file exists and is readable.")
+			}
+			if fileInfo.Size() > 50*1024*1024 {
+				return toolError("file too large (max 50MB)", "")
+			}
+
 			// Read file
 			data, err := os.ReadFile(args.FilePath)
 			if err != nil {

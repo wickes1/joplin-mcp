@@ -26,8 +26,10 @@ func main() {
 
 	port := 41184
 	if portStr := os.Getenv("JOPLIN_PORT"); portStr != "" {
-		if p, err := strconv.Atoi(portStr); err == nil {
+		if p, err := strconv.Atoi(portStr); err == nil && p >= 1 && p <= 65535 {
 			port = p
+		} else {
+			slog.Warn("invalid JOPLIN_PORT, using default", "value", portStr, "default", port)
 		}
 	}
 
