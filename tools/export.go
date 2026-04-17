@@ -55,6 +55,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			exportRoot := args.FolderID == ""
 
 			exported := 0
+			skipped := 0
 			var exportedFolderTitles []string
 
 			// usedPaths tracks filenames used within a directory to handle collisions
@@ -129,6 +130,8 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 						if n.ParentID == "" {
 							if err := writeNote(n, "", ""); err == nil {
 								exported++
+							} else {
+								skipped++
 							}
 						}
 					}
@@ -158,6 +161,8 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 						if err := writeNote(n, folderPath, folder.Title); err == nil {
 							exported++
 							folderHadNotes = true
+						} else {
+							skipped++
 						}
 					}
 					if !resp.HasMore {
@@ -172,6 +177,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 
 			return toolSuccess(map[string]any{
 				"exported":   exported,
+				"skipped":    skipped,
 				"output_dir": args.OutputDir,
 				"folders":    exportedFolderTitles,
 			})
@@ -220,6 +226,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			}
 
 			imported := 0
+			skipped := 0
 			foldersCreated := 0
 			var importErrors []string
 
@@ -284,6 +291,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 					return nil
 				}
 				if !strings.EqualFold(filepath.Ext(path), ".md") {
+					skipped++
 					return nil
 				}
 
@@ -306,6 +314,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				data, err := os.ReadFile(path)
 				if err != nil {
 					importErrors = append(importErrors, fmt.Sprintf("failed to read %q: %s", path, err.Error()))
+					skipped++
 					return nil
 				}
 				body := string(data)
@@ -337,6 +346,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 
 			return toolSuccess(map[string]any{
 				"imported":        imported,
+				"skipped":         skipped,
 				"folders_created": foldersCreated,
 				"errors":          importErrors,
 			})
@@ -357,12 +367,6 @@ func sanitizeFilename(name string) string {
 		name = string(runes[:200])
 	}
 	return name
-}
-
-// fileExists reports whether a path exists on disk.
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }
 
 // buildFrontmatter generates a YAML frontmatter block for the given note.

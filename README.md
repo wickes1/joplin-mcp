@@ -139,7 +139,7 @@ Add to your `.mcp.json` (or Claude Code's MCP config):
 Tools follow a **slim / full / preview** pattern to keep token usage low:
 
 - **Slim** (list operations): `id`, `title`, `parent_id`, `folder_title`, `is_todo`, `updated_time`. Used for browsing without fetching note bodies.
-- **Full** (get / create / update): All slim fields plus `body`, `created_time`, `todo_completed`, and `tags[]`. Used when content is needed.
+- **Full** (get_note, get_notes): All slim fields plus `body`, `created_time`, `todo_completed`, and `tags[]`. Used when content is needed.
 - **Preview** (search): Slim fields plus the first 200 characters of the body. Usually enough to judge relevance without a follow-up `get_note` call.
 
 Write operations (`create_note`, `update_note`, etc.) return slim responses; read operations (`get_note`, `get_notes`) return full responses.

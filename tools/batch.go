@@ -214,11 +214,9 @@ func RegisterBatchTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				} else {
 					// remove: tag doesn't exist, nothing to do
 					return toolSuccess(map[string]any{
-						"succeeded": 0,
-						"failed":    0,
-						"errors":    []joplin.BatchItemError{},
-						"tag_name":  args.TagName,
-						"action":    action,
+						"result":   joplin.BatchResult{Succeeded: 0, Failed: 0, Errors: []joplin.BatchItemError{}},
+						"tag_name": args.TagName,
+						"action":   action,
 					})
 				}
 			}
@@ -259,11 +257,9 @@ func RegisterBatchTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			}
 
 			return toolSuccess(map[string]any{
-				"succeeded": result.Succeeded,
-				"failed":    result.Failed,
-				"errors":    result.Errors,
-				"tag_name":  args.TagName,
-				"action":    action,
+				"result":   result,
+				"tag_name": tag.Title,
+				"action":   action,
 			})
 		})
 }
