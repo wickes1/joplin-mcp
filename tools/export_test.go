@@ -127,7 +127,7 @@ func TestExportNotes_WithMetadata(t *testing.T) {
 	if !strings.HasPrefix(text, "---\n") {
 		t.Error("file should start with YAML frontmatter delimiter '---'")
 	}
-	if !strings.Contains(text, "joplin_id: n1") {
+	if !strings.Contains(text, `joplin_id: "n1"`) {
 		t.Error("frontmatter should contain joplin_id")
 	}
 	if !strings.Contains(text, `title: "Meeting Notes"`) {
@@ -136,7 +136,7 @@ func TestExportNotes_WithMetadata(t *testing.T) {
 	if !strings.Contains(text, `folder: "Work"`) {
 		t.Error("frontmatter should contain folder")
 	}
-	if !strings.Contains(text, "- meeting") {
+	if !strings.Contains(text, `- "meeting"`) {
 		t.Error("frontmatter should contain tag 'meeting'")
 	}
 	if !strings.Contains(text, "created:") {
