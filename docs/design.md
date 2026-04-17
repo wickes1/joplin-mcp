@@ -1,7 +1,7 @@
 # Joplin MCP Server — Design Document
 
 **Date**: 2026-04-14
-**Status**: Approved (post-review v3)
+**Status**: Approved (v2)
 **Language**: Go 1.26+
 **SDK**: `modelcontextprotocol/go-sdk` v1.5+
 **License**: MIT
@@ -10,7 +10,9 @@
 
 ## 1. Overview
 
-A Go-based MCP server that connects to a local Joplin desktop application via its Web Clipper REST API (localhost:41184). Provides 18 tools for full note, folder, tag, and search operations.
+A Go-based MCP server that connects to a local Joplin desktop application via its Web Clipper REST API (localhost:41184). Provides 27 tools for full note, folder, tag, search, batch, export/import, and resource operations.
+
+**v2 changes**: Added batch tools (`batch_move_notes`, `batch_tag_notes`, `merge_notes`), export/import tools (`export_notes`, `batch_import_markdown`), resource tools (`list_resources`, `get_resource`, `download_resource`, `upload_resource`), and `update_folder`. `update_note` now subsumes the former `append_to_note` tool via an `append` parameter.
 
 **Goals:**
 - Single binary deployment, zero runtime dependencies
@@ -109,7 +111,7 @@ server.Run(ctx, &mcp.StdioTransport{})
 - `joplin/errors.go`: All errors include agent-guidance messages
 - `tools/helpers.go`: Shared folder cache (session-level, 30s TTL), `toolError()` helper
 
-## 4. MCP Tools (18 total)
+## 4. MCP Tools (27 total)
 
 ### 4.1 Notes (8 tools)
 
