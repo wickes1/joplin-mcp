@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/Wickes1/joplin-mcp/joplin"
@@ -121,19 +122,19 @@ func TestMergeNotes(t *testing.T) {
 	if got.Body != mergedBody {
 		t.Errorf("body mismatch:\ngot:  %q\nwant: %q", got.Body, mergedBody)
 	}
-	if !containsSubstring(got.Body, "## First Note") {
+	if !strings.Contains(got.Body, "## First Note") {
 		t.Error("merged body should contain '## First Note'")
 	}
-	if !containsSubstring(got.Body, "## Second Note") {
+	if !strings.Contains(got.Body, "## Second Note") {
 		t.Error("merged body should contain '## Second Note'")
 	}
-	if !containsSubstring(got.Body, "---") {
+	if !strings.Contains(got.Body, "---") {
 		t.Error("merged body should contain '---' separator")
 	}
-	if !containsSubstring(got.Body, "Content of first note.") {
+	if !strings.Contains(got.Body, "Content of first note.") {
 		t.Error("merged body should contain first note content")
 	}
-	if !containsSubstring(got.Body, "Content of second note.") {
+	if !strings.Contains(got.Body, "Content of second note.") {
 		t.Error("merged body should contain second note content")
 	}
 }
@@ -205,16 +206,3 @@ func TestBatchTagNotes_Remove(t *testing.T) {
 	}
 }
 
-// containsSubstring is a test helper for readable assertions.
-func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && contains(s, substr))
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
