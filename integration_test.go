@@ -63,7 +63,7 @@ func TestIntegration_NoteCRUD(t *testing.T) {
 
 	// Search — Joplin's FTS index may need time after writes
 	time.Sleep(2 * time.Second)
-	results, err := c.SearchNotes(ctx, "Updated Title", 10)
+	results, err := c.SearchNotes(ctx, "Updated Title", 1, 10)
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}

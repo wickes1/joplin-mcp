@@ -12,7 +12,7 @@ import (
 )
 
 // RegisterNoteTools registers the 6 note-related MCP tools onto the server.
-func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
+func RegisterNoteTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "list_notes", Description: "List notes, optionally filtered by folder. Returns slim notes and a has_more flag."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
 			FolderID string `json:"folder_id,omitempty" jsonschema:"Filter by folder ID (optional)"`
@@ -33,10 +33,7 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			resp, err := c.ListNotes(ctx, args.FolderID, page, limit)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			slim := make([]joplin.SlimNote, 0, len(resp.Items))
@@ -62,10 +59,7 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			note, err := c.GetNote(ctx, args.NoteID)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			tags, err := c.GetNoteTags(ctx, args.NoteID)
@@ -162,24 +156,9 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 				return toolError("title is required", "")
 			}
 
-			folderID := args.FolderID
-
-			// Resolve or auto-create folder by name
-			if args.FolderName != "" && folderID == "" {
-				existing := fc.FindByName(args.FolderName)
-				if existing != nil {
-					folderID = existing.ID
-				} else {
-					newFolder, err := c.CreateFolder(ctx, args.FolderName, "")
-					if err != nil {
-						if ae, ok := err.(*joplin.AgentError); ok {
-							return toolErrorFromAgent(ae)
-						}
-						return toolError(fmt.Sprintf("failed to create folder %q: %s", args.FolderName, err.Error()), "")
-					}
-					fc.Invalidate()
-					folderID = newFolder.ID
-				}
+			folderID, folderTitle, err := resolveFolderID(ctx, c, fc, args.FolderID, args.FolderName, true)
+			if err != nil {
+				return handleErr(err)
 			}
 
 			params := joplin.NoteCreateParams{
@@ -193,58 +172,28 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			note, err := c.CreateNote(ctx, params)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
-			// Apply tags
-			var tagWarnings []string
-			appliedTags := make([]string, 0, len(args.TagNames))
+			appliedTags, tagWarnings := applyTags(ctx, c, note.ID, args.TagNames)
 
-			if len(args.TagNames) > 0 {
-				allTags, listErr := c.ListTags(ctx)
-				if listErr != nil {
-					tagWarnings = append(tagWarnings, fmt.Sprintf("failed to list tags: %s", listErr.Error()))
-				} else {
-					for _, tagName := range args.TagNames {
-						tag := FindTagByName(allTags, tagName)
-						if tag == nil {
-							// Auto-create tag
-							newTag, createErr := c.CreateTag(ctx, tagName)
-							if createErr != nil {
-								tagWarnings = append(tagWarnings, fmt.Sprintf("failed to create tag %q: %s", tagName, createErr.Error()))
-								continue
-							}
-							tag = newTag
-							allTags = append(allTags, *newTag)
-						}
-						if assocErr := c.TagNote(ctx, tag.ID, note.ID); assocErr != nil {
-							tagWarnings = append(tagWarnings, fmt.Sprintf("failed to apply tag %q: %s", tagName, assocErr.Error()))
-							continue
-						}
-						appliedTags = append(appliedTags, tag.Title)
-					}
-				}
-			}
-
-			folderTitle := fc.GetTitle(note.ParentID)
-			full := note.ToFull(folderTitle, appliedTags)
+			slim := note.ToSlim(folderTitle)
 
 			return toolSuccess(map[string]any{
-				"note":         full,
+				"note":         slim,
+				"applied_tags": appliedTags,
 				"tag_warnings": tagWarnings,
 			})
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "update_note", Description: "Update an existing note's title, body, folder, or to-do status. folder_name lookup only — use create_folder first if the folder doesn't exist."},
+	mcp.AddTool(s, &mcp.Tool{Name: "update_note", Description: "Update an existing note's title, body, folder, or to-do status. Set append=true to append content instead of replacing. folder_name auto-creates if not found."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
 			NoteID     string  `json:"note_id"               jsonschema:"The note ID to update"`
 			Title      *string `json:"title,omitempty"       jsonschema:"New title"`
-			Body       *string `json:"body,omitempty"        jsonschema:"New body in Markdown"`
+			Body       *string `json:"body,omitempty"        jsonschema:"New body (or content to append when append=true)"`
+			Append     bool    `json:"append,omitempty"      jsonschema:"If true append body to existing content instead of replacing"`
 			FolderID   *string `json:"folder_id,omitempty"   jsonschema:"New folder ID"`
-			FolderName string  `json:"folder_name,omitempty" jsonschema:"New folder name (must already exist — will not auto-create)"`
+			FolderName string  `json:"folder_name,omitempty" jsonschema:"New folder name (auto-creates if not found)"`
 			IsTodo     *bool   `json:"is_todo,omitempty"     jsonschema:"Set to-do status"`
 		}) (*mcp.CallToolResult, any, error) {
 			if args.NoteID == "" {
@@ -253,19 +202,31 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			params := joplin.NoteUpdateParams{
 				Title: args.Title,
-				Body:  args.Body,
 			}
 
-			// Resolve folder by name (lookup only — no auto-create)
-			if args.FolderName != "" && args.FolderID == nil {
-				existing := fc.FindByName(args.FolderName)
-				if existing == nil {
-					ae := joplin.FolderNameNotFound(args.FolderName)
-					return toolErrorFromAgent(ae)
+			// Handle append mode: read current body, concatenate
+			if args.Append && args.Body != nil {
+				existing, err := c.GetNote(ctx, args.NoteID)
+				if err != nil {
+					return handleErr(err)
 				}
-				params.ParentID = joplin.StringPtr(existing.ID)
-			} else if args.FolderID != nil {
-				params.ParentID = args.FolderID
+				newBody := existing.Body + "\n" + *args.Body
+				params.Body = &newBody
+			} else {
+				params.Body = args.Body
+			}
+
+			// Resolve folder
+			var folderID string
+			if args.FolderID != nil {
+				folderID = *args.FolderID
+			}
+			resolvedID, _, err := resolveFolderID(ctx, c, fc, folderID, args.FolderName, true)
+			if err != nil {
+				return handleErr(err)
+			}
+			if resolvedID != "" {
+				params.ParentID = joplin.StringPtr(resolvedID)
 			}
 
 			if args.IsTodo != nil {
@@ -278,21 +239,12 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			note, err := c.UpdateNote(ctx, args.NoteID, params)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
-			}
-
-			tags, _ := c.GetNoteTags(ctx, note.ID)
-			tagNames := make([]string, 0, len(tags))
-			for _, t := range tags {
-				tagNames = append(tagNames, t.Title)
+				return handleErr(err)
 			}
 
 			folderTitle := fc.GetTitle(note.ParentID)
-			full := note.ToFull(folderTitle, tagNames)
-			return toolSuccess(full)
+			slim := note.ToSlim(folderTitle)
+			return toolSuccess(slim)
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_note", Description: "Delete a note by ID. By default moves to trash; set permanent=true to bypass trash."},
@@ -305,10 +257,7 @@ func RegisterNoteTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 			}
 
 			if err := c.DeleteNote(ctx, args.NoteID, args.Permanent); err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			msg := fmt.Sprintf("Note %s moved to trash.", args.NoteID)
