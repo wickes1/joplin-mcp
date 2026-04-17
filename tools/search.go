@@ -26,7 +26,7 @@ func RegisterSearchTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 				limit = 50
 			}
 
-			resp, err := c.SearchNotes(ctx, args.Query, limit)
+			resp, err := c.SearchNotes(ctx, args.Query, 1, limit)
 			if err != nil {
 				if ae, ok := err.(*joplin.AgentError); ok {
 					return toolErrorFromAgent(ae)

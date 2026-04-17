@@ -45,18 +45,61 @@ type SlimNote struct {
 	UpdatedTime string `json:"updated_time,omitempty"`
 }
 
-// FullNote is the MCP response for get/create/update operations (all fields).
+// FullNote is the MCP response for read operations (all fields).
 type FullNote struct {
-	ID            string   `json:"id"`
-	Title         string   `json:"title"`
+	SlimNote
 	Body          string   `json:"body"`
-	ParentID      string   `json:"parent_id"`
-	FolderTitle   string   `json:"folder_title,omitempty"`
-	IsTodo        bool     `json:"is_todo"`
-	TodoCompleted *string  `json:"todo_completed"`
 	CreatedTime   string   `json:"created_time,omitempty"`
-	UpdatedTime   string   `json:"updated_time,omitempty"`
+	TodoCompleted *string  `json:"todo_completed"`
 	Tags          []string `json:"tags"`
+}
+
+// Resource is the raw Joplin API resource (attachment) representation.
+type Resource struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Mime        string `json:"mime"`
+	Filename    string `json:"filename"`
+	Size        int64  `json:"size"`
+	UpdatedTime int64  `json:"updated_time"`
+}
+
+// ResourceResponse is the MCP response for resource operations (formatted timestamps).
+type ResourceResponse struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Mime        string `json:"mime"`
+	Filename    string `json:"filename"`
+	Size        int64  `json:"size"`
+	UpdatedTime string `json:"updated_time"`
+}
+
+// ToSlim converts a raw Resource to a ResourceResponse with formatted timestamps.
+func (r *Resource) ToSlim() ResourceResponse {
+	return ResourceResponse{
+		ID: r.ID, Title: r.Title, Mime: r.Mime, Filename: r.Filename,
+		Size: r.Size, UpdatedTime: FormatTimestamp(r.UpdatedTime),
+	}
+}
+
+// FolderUpdateParams holds parameters for updating a folder via the Joplin API.
+// Pointer fields allow partial updates (only non-nil fields are sent).
+type FolderUpdateParams struct {
+	Title    *string `json:"title,omitempty"`
+	ParentID *string `json:"parent_id,omitempty"`
+}
+
+// BatchResult holds the outcome of a batch operation.
+type BatchResult struct {
+	Succeeded int              `json:"succeeded"`
+	Failed    int              `json:"failed"`
+	Errors    []BatchItemError `json:"errors,omitempty"`
+}
+
+// BatchItemError records a single failure within a batch operation.
+type BatchItemError struct {
+	ID    string `json:"id"`
+	Error string `json:"error"`
 }
 
 // PreviewNote is the MCP response for search operations (slim + body preview).
@@ -115,14 +158,9 @@ func (n *Note) ToSlim(folderTitle string) SlimNote {
 // ToFull converts a raw Note to a FullNote. folderTitle and tags are resolved externally.
 func (n *Note) ToFull(folderTitle string, tags []string) FullNote {
 	full := FullNote{
-		ID:          n.ID,
-		Title:       n.Title,
+		SlimNote:    n.ToSlim(folderTitle),
 		Body:        n.Body,
-		ParentID:    n.ParentID,
-		FolderTitle: folderTitle,
-		IsTodo:      n.IsTodo != 0,
 		CreatedTime: FormatTimestamp(n.CreatedTime),
-		UpdatedTime: FormatTimestamp(n.UpdatedTime),
 		Tags:        tags,
 	}
 	// todo_completed: 0 → null, >0 → ISO 8601 timestamp string
