@@ -6,11 +6,47 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
+
+// API defines the interface for interacting with the Joplin REST API.
+// All tool implementations depend on this interface for testability.
+type API interface {
+	Ping(ctx context.Context) error
+	GetNote(ctx context.Context, id string) (*Note, error)
+	GetNoteTags(ctx context.Context, noteID string) ([]Tag, error)
+	ListNotes(ctx context.Context, folderID string, page, limit int) (*PaginatedResponse[Note], error)
+	SearchNotes(ctx context.Context, query string, page, limit int) (*PaginatedResponse[Note], error)
+	CreateNote(ctx context.Context, params NoteCreateParams) (*Note, error)
+	UpdateNote(ctx context.Context, id string, params NoteUpdateParams) (*Note, error)
+	DeleteNote(ctx context.Context, id string, permanent bool) error
+	ListFolders(ctx context.Context) ([]*Folder, error)
+	CreateFolder(ctx context.Context, title string, parentID string) (*Folder, error)
+	UpdateFolder(ctx context.Context, id string, params FolderUpdateParams) (*Folder, error)
+	DeleteFolder(ctx context.Context, id string, permanent bool) error
+	ListTags(ctx context.Context) ([]Tag, error)
+	CreateTag(ctx context.Context, title string) (*Tag, error)
+	DeleteTag(ctx context.Context, id string) error
+	TagNote(ctx context.Context, tagID, noteID string) error
+	UntagNote(ctx context.Context, tagID, noteID string) error
+	GetNotesByTag(ctx context.Context, tagID string, page, limit int) (*PaginatedResponse[Note], error)
+	ListResources(ctx context.Context, page, limit int) (*PaginatedResponse[Resource], error)
+	GetResource(ctx context.Context, id string) (*Resource, error)
+	GetResourceFile(ctx context.Context, id string) ([]byte, error)
+	CreateResource(ctx context.Context, filePath, title string) (*Resource, error)
+	DeleteResource(ctx context.Context, id string) error
+	Host() string
+	Port() int
+}
+
+// Verify that Client implements API at compile time.
+var _ API = (*Client)(nil)
 
 // Client is an HTTP client for the Joplin REST API.
 type Client struct {
@@ -195,9 +231,10 @@ func (c *Client) DeleteNote(ctx context.Context, id string, permanent bool) erro
 }
 
 // SearchNotes performs a full-text search. It requests body in fields to avoid N+1 lookups.
-func (c *Client) SearchNotes(ctx context.Context, query string, limit int) (*PaginatedResponse[Note], error) {
+func (c *Client) SearchNotes(ctx context.Context, query string, page, limit int) (*PaginatedResponse[Note], error) {
 	q := url.Values{
 		"query":  []string{query},
+		"page":   []string{strconv.Itoa(page)},
 		"limit":  []string{strconv.Itoa(limit)},
 		"fields": []string{"id,title,parent_id,is_todo,updated_time,body"},
 	}
@@ -357,6 +394,128 @@ func (c *Client) GetNotesByTag(ctx context.Context, tagID string, page, limit in
 	return &resp, nil
 }
 
+// UpdateFolder applies a partial update to a folder.
+func (c *Client) UpdateFolder(ctx context.Context, id string, params FolderUpdateParams) (*Folder, error) {
+	data, err := c.doRequest(ctx, http.MethodPut, "/folders/"+id, nil, params)
+	if err != nil {
+		return nil, mapFolderError(err, id)
+	}
+	var folder Folder
+	if err := json.Unmarshal(data, &folder); err != nil {
+		return nil, fmt.Errorf("decoding updated folder: %w", err)
+	}
+	return &folder, nil
+}
+
+// ListResources fetches a page of resources (attachments).
+func (c *Client) ListResources(ctx context.Context, page, limit int) (*PaginatedResponse[Resource], error) {
+	q := url.Values{
+		"fields": []string{"id,title,mime,filename,size,updated_time"},
+		"page":   []string{strconv.Itoa(page)},
+		"limit":  []string{strconv.Itoa(limit)},
+	}
+	data, err := c.doRequest(ctx, http.MethodGet, "/resources", q, nil)
+	if err != nil {
+		return nil, err
+	}
+	var resp PaginatedResponse[Resource]
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("decoding resources list: %w", err)
+	}
+	return &resp, nil
+}
+
+// GetResource fetches a single resource by ID.
+func (c *Client) GetResource(ctx context.Context, id string) (*Resource, error) {
+	q := url.Values{"fields": []string{"id,title,mime,filename,size,updated_time"}}
+	data, err := c.doRequest(ctx, http.MethodGet, "/resources/"+id, q, nil)
+	if err != nil {
+		return nil, mapResourceError(err, id)
+	}
+	var resource Resource
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return nil, fmt.Errorf("decoding resource: %w", err)
+	}
+	return &resource, nil
+}
+
+// GetResourceFile fetches the binary content of a resource.
+func (c *Client) GetResourceFile(ctx context.Context, id string) ([]byte, error) {
+	data, err := c.doRequest(ctx, http.MethodGet, "/resources/"+id+"/file", nil, nil)
+	if err != nil {
+		return nil, mapResourceError(err, id)
+	}
+	return data, nil
+}
+
+// CreateResource uploads a file as a new Joplin resource via multipart form.
+func (c *Client) CreateResource(ctx context.Context, filePath, title string) (*Resource, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("opening file %q: %w", filePath, err)
+	}
+	defer f.Close()
+
+	// Build multipart form
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// Add the "props" field with JSON metadata
+	props := map[string]string{"title": title}
+	propsJSON, _ := json.Marshal(props)
+	if err := writer.WriteField("props", string(propsJSON)); err != nil {
+		return nil, fmt.Errorf("writing props field: %w", err)
+	}
+
+	// Add the file part
+	part, err := writer.CreateFormFile("data", filepath.Base(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("creating form file: %w", err)
+	}
+	if _, err := io.Copy(part, f); err != nil {
+		return nil, fmt.Errorf("copying file data: %w", err)
+	}
+	writer.Close()
+
+	// Build URL with token
+	rawURL := fmt.Sprintf("%s/resources?token=%s", c.baseURL, url.QueryEscape(c.token))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, &buf)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, JoplinUnavailable(c.host, c.port, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("joplin error %d creating resource: %s", resp.StatusCode, string(respBody))
+	}
+
+	var resource Resource
+	if err := json.Unmarshal(respBody, &resource); err != nil {
+		return nil, fmt.Errorf("decoding created resource: %w", err)
+	}
+	return &resource, nil
+}
+
+// DeleteResource deletes a resource by ID.
+func (c *Client) DeleteResource(ctx context.Context, id string) error {
+	_, err := c.doRequest(ctx, http.MethodDelete, "/resources/"+id, nil, nil)
+	if err != nil {
+		return mapResourceError(err, id)
+	}
+	return nil
+}
+
 // mapNoteError converts "not found" API errors to NoteNotFound AgentErrors.
 func mapNoteError(err error, id string) error {
 	if isNotFound(err) {
@@ -369,6 +528,14 @@ func mapNoteError(err error, id string) error {
 func mapFolderError(err error, id string) error {
 	if isNotFound(err) {
 		return FolderNotFound(id)
+	}
+	return err
+}
+
+// mapResourceError converts "not found" API errors to ResourceNotFound AgentErrors.
+func mapResourceError(err error, id string) error {
+	if isNotFound(err) {
+		return ResourceNotFound(id)
 	}
 	return err
 }
