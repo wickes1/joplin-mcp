@@ -70,7 +70,7 @@ func main() {
 	// --- MCP Server ---
 	server := mcp.NewServer(&mcp.Implementation{Name: "joplin-mcp", Version: "0.2.0"}, nil)
 
-	// Register all 21 MCP tools
+	// Register all MCP tools
 	tools.RegisterNoteTools(server, client, folderCache)
 	tools.RegisterSearchTools(server, client, folderCache)
 	tools.RegisterFolderTools(server, client, folderCache)
@@ -78,8 +78,9 @@ func main() {
 	tools.RegisterUtilityTools(server, client, folderCache)
 	tools.RegisterBatchTools(server, client, folderCache)
 	tools.RegisterExportTools(server, client, folderCache)
+	tools.RegisterResourceTools(server, client, folderCache)
 
-	slog.Info("registered 23 MCP tools")
+	slog.Info("registered 27 MCP tools")
 	slog.Info("joplin-mcp server ready")
 
 	// --- Run on stdio transport ---
