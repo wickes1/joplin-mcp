@@ -77,8 +77,9 @@ func main() {
 	tools.RegisterTagTools(server, client, folderCache)
 	tools.RegisterUtilityTools(server, client, folderCache)
 	tools.RegisterBatchTools(server, client, folderCache)
+	tools.RegisterExportTools(server, client, folderCache)
 
-	slog.Info("registered 21 MCP tools")
+	slog.Info("registered 23 MCP tools")
 	slog.Info("joplin-mcp server ready")
 
 	// --- Run on stdio transport ---
