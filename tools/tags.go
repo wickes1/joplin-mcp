@@ -9,15 +9,12 @@ import (
 )
 
 // RegisterTagTools registers the 5 tag-related MCP tools onto the server.
-func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
+func RegisterTagTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 	mcp.AddTool(s, &mcp.Tool{Name: "list_tags", Description: "List all tags in the Joplin library."},
 		func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 			tags, err := c.ListTags(ctx)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 			return toolSuccess(tags)
 		})
@@ -36,29 +33,20 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			allTags, err := c.ListTags(ctx)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			tag := FindTagByName(allTags, args.TagName)
 			if tag == nil {
 				newTag, createErr := c.CreateTag(ctx, args.TagName)
 				if createErr != nil {
-					if ae, ok := createErr.(*joplin.AgentError); ok {
-						return toolErrorFromAgent(ae)
-					}
-					return toolError(fmt.Sprintf("failed to create tag %q: %s", args.TagName, createErr.Error()), "")
+					return handleErr(createErr)
 				}
 				tag = newTag
 			}
 
 			if err := c.TagNote(ctx, tag.ID, args.NoteID); err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(fmt.Sprintf("failed to associate tag: %s", err.Error()), "")
+				return handleErr(err)
 			}
 
 			return toolSuccess(map[string]string{
@@ -83,23 +71,16 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			allTags, err := c.ListTags(ctx)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			tag := FindTagByName(allTags, args.TagName)
 			if tag == nil {
-				ae := joplin.TagNotFound(args.TagName)
-				return toolErrorFromAgent(ae)
+				return handleErr(joplin.TagNotFound(args.TagName))
 			}
 
 			if err := c.UntagNote(ctx, tag.ID, args.NoteID); err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(fmt.Sprintf("failed to remove tag: %s", err.Error()), "")
+				return handleErr(err)
 			}
 
 			return toolSuccess(map[string]string{
@@ -119,10 +100,7 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 			}
 
 			if err := c.DeleteTag(ctx, args.TagID); err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			return toolSuccess(map[string]string{
@@ -151,24 +129,17 @@ func RegisterTagTools(s *mcp.Server, c *joplin.Client, fc *FolderCache) {
 
 			allTags, err := c.ListTags(ctx)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			tag := FindTagByName(allTags, args.TagName)
 			if tag == nil {
-				ae := joplin.TagNotFound(args.TagName)
-				return toolErrorFromAgent(ae)
+				return handleErr(joplin.TagNotFound(args.TagName))
 			}
 
 			resp, err := c.GetNotesByTag(ctx, tag.ID, page, limit)
 			if err != nil {
-				if ae, ok := err.(*joplin.AgentError); ok {
-					return toolErrorFromAgent(ae)
-				}
-				return toolError(err.Error(), "")
+				return handleErr(err)
 			}
 
 			slim := make([]joplin.SlimNote, 0, len(resp.Items))

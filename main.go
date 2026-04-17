@@ -68,11 +68,10 @@ func main() {
 	folderCache := tools.NewFolderCache(client)
 
 	// --- MCP Server ---
-	server := mcp.NewServer(&mcp.Implementation{Name: "joplin-mcp", Version: "0.1.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "joplin-mcp", Version: "0.2.0"}, nil)
 
 	// Register all 18 MCP tools
 	tools.RegisterNoteTools(server, client, folderCache)
-	tools.RegisterAppendTool(server, client, folderCache)
 	tools.RegisterSearchTools(server, client, folderCache)
 	tools.RegisterFolderTools(server, client, folderCache)
 	tools.RegisterTagTools(server, client, folderCache)
