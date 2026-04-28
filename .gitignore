@@ -6,3 +6,4 @@ joplin-mcp-*
 .DS_Store
 coverage.out
 .mcp.json
+dist/

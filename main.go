@@ -11,6 +11,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+var version = "dev"
+
 func main() {
 	// --- Configuration from environment ---
 	token := os.Getenv("JOPLIN_TOKEN")
@@ -70,7 +72,7 @@ func main() {
 	folderCache := tools.NewFolderCache(client)
 
 	// --- MCP Server ---
-	server := mcp.NewServer(&mcp.Implementation{Name: "joplin-mcp", Version: "0.2.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "joplin-mcp", Version: version}, nil)
 
 	// Register all MCP tools
 	tools.RegisterNoteTools(server, client, folderCache)
