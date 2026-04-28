@@ -23,17 +23,24 @@ A Go-based MCP server that connects AI assistants to Joplin desktop for complete
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew tap wickes1/tap
+brew install joplin-mcp
+```
+
+### Go
+
 ```bash
 go install github.com/Wickes1/joplin-mcp@latest
 ```
 
-Or build from source:
+### Binary
 
-```bash
-git clone https://github.com/Wickes1/joplin-mcp
-cd joplin-mcp
-go build -o joplin-mcp .
-```
+Download pre-built binaries from [GitHub Releases](https://github.com/wickes1/joplin-mcp/releases).
+
+Available for: macOS (Intel/Apple Silicon), Linux (x86_64/arm64), Windows (x86_64/arm64).
 
 ## Configuration
 
