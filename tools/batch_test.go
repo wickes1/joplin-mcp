@@ -205,4 +205,3 @@ func TestBatchTagNotes_Remove(t *testing.T) {
 		t.Errorf("expected 0 tags after removal, got %d", len(tagsAfter))
 	}
 }
-
