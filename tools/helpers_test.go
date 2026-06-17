@@ -101,30 +101,30 @@ func TestFindTagByName(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		query    string
-		wantID   string
-		wantNil  bool
+		name    string
+		query   string
+		wantID  string
+		wantNil bool
 	}{
 		{
-			name:    "exact match lowercase",
-			query:   "urgent",
-			wantID:  "t2",
+			name:   "exact match lowercase",
+			query:  "urgent",
+			wantID: "t2",
 		},
 		{
-			name:    "case-insensitive match",
-			query:   "project",
-			wantID:  "t1",
+			name:   "case-insensitive match",
+			query:  "project",
+			wantID: "t1",
 		},
 		{
-			name:    "uppercase query",
-			query:   "URGENT",
-			wantID:  "t2",
+			name:   "uppercase query",
+			query:  "URGENT",
+			wantID: "t2",
 		},
 		{
-			name:    "mixed case with hyphens",
-			query:   "work-in-progress",
-			wantID:  "t3",
+			name:   "mixed case with hyphens",
+			query:  "work-in-progress",
+			wantID: "t3",
 		},
 		{
 			name:    "missing tag returns nil",
