@@ -132,10 +132,10 @@ func FindTagByName(tags []joplin.Tag, name string) *joplin.Tag {
 
 // folderCacheEntry holds cached folder data with expiry.
 type folderCacheEntry struct {
-	folders   []*joplin.Folder
-	flatByID  map[string]*joplin.Folder  // id → folder
+	folders    []*joplin.Folder
+	flatByID   map[string]*joplin.Folder // id → folder
 	flatByName map[string]*joplin.Folder // lowercase title → folder
-	expiresAt time.Time
+	expiresAt  time.Time
 }
 
 // FolderCache is a session-level, thread-safe cache for folder data with a 30s TTL.
@@ -178,7 +178,10 @@ func (fc *FolderCache) load() (*folderCacheEntry, error) {
 		return fc.entry, nil
 	}
 
-	folders, err := fc.client.ListFolders(context.Background())
+	// Bound the refresh so we do not hold the write lock indefinitely if Joplin hangs.
+	refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	folders, err := fc.client.ListFolders(refreshCtx)
 	if err != nil {
 		return nil, err
 	}

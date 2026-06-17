@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -48,26 +50,57 @@ type API interface {
 // Verify that Client implements API at compile time.
 var _ API = (*Client)(nil)
 
+// maxPages is the upper bound on internal pagination loops.
+// Exceeding this limit triggers a warning and returns what was collected.
+const maxPages = 1000
+
 // Client is an HTTP client for the Joplin REST API.
 type Client struct {
-	baseURL    string
-	token      string
-	host       string
-	port       int
-	httpClient *http.Client
+	baseURL      string
+	token        string
+	host         string
+	port         int
+	httpClient   *http.Client
+	readTimeout  time.Duration
+	writeTimeout time.Duration
+}
+
+// Option is a functional option for configuring a Client.
+type Option func(*Client)
+
+// WithReadTimeout sets the per-request timeout for GET operations.
+// The default is 30 seconds.
+func WithReadTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		c.readTimeout = d
+	}
+}
+
+// WithWriteTimeout sets the per-request timeout for POST, PUT, and DELETE operations.
+// The default is 120 seconds. Joplin re-renders markdown and re-indexes FTS on writes,
+// so write operations can be significantly slower than reads.
+func WithWriteTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		c.writeTimeout = d
+	}
 }
 
 // NewClient creates a new Joplin API client.
-func NewClient(token, host string, port int) *Client {
-	return &Client{
-		baseURL: fmt.Sprintf("http://%s:%d", host, port),
-		token:   token,
-		host:    host,
-		port:    port,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+// opts are applied after defaults; unknown options are no-ops by design.
+func NewClient(token, host string, port int, opts ...Option) *Client {
+	c := &Client{
+		baseURL:      fmt.Sprintf("http://%s:%d", host, port),
+		token:        token,
+		host:         host,
+		port:         port,
+		httpClient:   &http.Client{}, // no global Timeout; enforced per-request via context
+		readTimeout:  30 * time.Second,
+		writeTimeout: 120 * time.Second,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Host returns the configured Joplin host.
@@ -75,6 +108,11 @@ func (c *Client) Host() string { return c.host }
 
 // Port returns the configured Joplin port.
 func (c *Client) Port() int { return c.port }
+
+// isWriteMethod reports whether the HTTP method mutates state on the server.
+func isWriteMethod(method string) bool {
+	return method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete
+}
 
 // doRequest performs an HTTP request to the Joplin API.
 // It injects the token, handles error status codes (with one retry on 5xx),
@@ -84,6 +122,24 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query url.V
 }
 
 func (c *Client) doRequestWithRetry(ctx context.Context, method, path string, query url.Values, body any, allowRetry bool) ([]byte, error) {
+	// Derive a per-attempt context with the appropriate timeout.
+	// context.WithTimeout returns the earlier of parent deadline and now+opTimeout,
+	// so a tighter caller context (e.g. batch with 30 s budget) still caps correctly.
+	opTimeout := c.readTimeout
+	if isWriteMethod(method) {
+		opTimeout = c.writeTimeout
+	}
+	// If the caller's context has a tighter deadline (e.g. a batch budget),
+	// report that remaining budget in any timeout error rather than the larger
+	// per-op default.
+	if dl, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(dl); remaining > 0 && remaining < opTimeout {
+			opTimeout = remaining
+		}
+	}
+	opCtx, cancel := context.WithTimeout(ctx, opTimeout)
+	defer cancel()
+
 	// Build URL with token
 	rawURL := c.baseURL + path
 	params := make(url.Values)
@@ -105,7 +161,7 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, path string, qu
 		bodyReader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, rawURL, bodyReader)
+	req, err := http.NewRequestWithContext(opCtx, method, rawURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
@@ -115,6 +171,9 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, path string, qu
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(opCtx.Err(), context.DeadlineExceeded) {
+			return nil, JoplinTimeout(c.host, c.port, isWriteMethod(method), opTimeout)
+		}
 		return nil, JoplinUnavailable(c.host, c.port, err)
 	}
 	defer resp.Body.Close()
@@ -137,6 +196,7 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, path string, qu
 				return nil, ctx.Err()
 			case <-time.After(500 * time.Millisecond):
 			}
+			// Recurse with the ORIGINAL ctx so each retry derives a fresh deadline.
 			return c.doRequestWithRetry(ctx, method, path, query, body, false)
 		}
 		return nil, fmt.Errorf("joplin server error %d: %s", resp.StatusCode, string(respBody))
@@ -251,10 +311,18 @@ func (c *Client) SearchNotes(ctx context.Context, query string, page, limit int)
 
 // ListFolders fetches all folders, paginating internally.
 // Returns the top-level tree structure Joplin provides.
+// Pagination is capped at maxPages to prevent unbounded loops on unexpected API behaviour.
 func (c *Client) ListFolders(ctx context.Context) ([]*Folder, error) {
 	var all []*Folder
 	page := 1
 	for {
+		if page > maxPages {
+			slog.Warn("ListFolders: pagination limit reached, returning partial results",
+				"pages_fetched", maxPages,
+				"folders_collected", len(all),
+			)
+			break
+		}
 		q := url.Values{
 			"page":  []string{strconv.Itoa(page)},
 			"limit": []string{"100"},
@@ -307,10 +375,18 @@ func (c *Client) DeleteFolder(ctx context.Context, id string, permanent bool) er
 }
 
 // ListTags fetches all tags, paginating internally.
+// Pagination is capped at maxPages to prevent unbounded loops on unexpected API behaviour.
 func (c *Client) ListTags(ctx context.Context) ([]Tag, error) {
 	var all []Tag
 	page := 1
 	for {
+		if page > maxPages {
+			slog.Warn("ListTags: pagination limit reached, returning partial results",
+				"pages_fetched", maxPages,
+				"tags_collected", len(all),
+			)
+			break
+		}
 		q := url.Values{
 			"page":  []string{strconv.Itoa(page)},
 			"limit": []string{"100"},
@@ -449,6 +525,8 @@ func (c *Client) GetResourceFile(ctx context.Context, id string) ([]byte, error)
 }
 
 // CreateResource uploads a file as a new Joplin resource via multipart form.
+// A write-timeout context is applied because large uploads combined with
+// Joplin's post-upload indexing can exceed a read-oriented deadline.
 func (c *Client) CreateResource(ctx context.Context, filePath, title string) (*Resource, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -477,9 +555,20 @@ func (c *Client) CreateResource(ctx context.Context, filePath, title string) (*R
 	}
 	writer.Close()
 
+	// Derive a write-timeout context for the upload request, honoring a tighter
+	// caller deadline so any timeout error reports the budget actually applied.
+	uploadTimeout := c.writeTimeout
+	if dl, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(dl); remaining > 0 && remaining < uploadTimeout {
+			uploadTimeout = remaining
+		}
+	}
+	uploadCtx, cancel := context.WithTimeout(ctx, uploadTimeout)
+	defer cancel()
+
 	// Build URL with token
 	rawURL := fmt.Sprintf("%s/resources?token=%s", c.baseURL, url.QueryEscape(c.token))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, &buf)
+	req, err := http.NewRequestWithContext(uploadCtx, http.MethodPost, rawURL, &buf)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
@@ -487,6 +576,9 @@ func (c *Client) CreateResource(ctx context.Context, filePath, title string) (*R
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(uploadCtx.Err(), context.DeadlineExceeded) {
+			return nil, JoplinTimeout(c.host, c.port, true, uploadTimeout)
+		}
 		return nil, JoplinUnavailable(c.host, c.port, err)
 	}
 	defer resp.Body.Close()

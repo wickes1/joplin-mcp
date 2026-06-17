@@ -69,6 +69,8 @@ Add to your `.mcp.json` (or Claude Code's MCP config):
 | `JOPLIN_HOST` | `localhost` | Joplin API host |
 | `JOPLIN_PORT` | `41184` | Joplin API port |
 | `JOPLIN_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `JOPLIN_READ_TIMEOUT` | `30` | Per-request timeout in seconds for GET operations |
+| `JOPLIN_WRITE_TIMEOUT` | `120` | Per-request timeout in seconds for POST/PUT/DELETE operations |
 
 > **Security**: Do not commit `JOPLIN_TOKEN` to version control. On macOS, store it in Keychain and inject it via a wrapper script.
 

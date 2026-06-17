@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestClient creates a Client pointing at the given test server URL.
@@ -139,9 +140,9 @@ func Test403ReturnsForbiddenError(t *testing.T) {
 // TestFormatTimestamp verifies timestamp conversion.
 func TestFormatTimestamp(t *testing.T) {
 	tests := []struct {
-		name     string
-		ms       int64
-		wantEmpty bool
+		name         string
+		ms           int64
+		wantEmpty    bool
 		wantContains string
 	}{
 		{
@@ -214,6 +215,95 @@ func TestNoteToSlim(t *testing.T) {
 				t.Error("UpdatedTime should not be empty for non-zero timestamp")
 			}
 		})
+	}
+}
+
+// TestJoplinTimeout_ReadHint verifies that JoplinTimeout for a read op omits the write-safety warning.
+func TestJoplinTimeout_ReadHint(t *testing.T) {
+	ae := JoplinTimeout("localhost", 41184, false, 30*time.Second)
+	if ae == nil {
+		t.Fatal("expected non-nil AgentError")
+	}
+	if !strings.Contains(ae.ErrorMsg, "localhost") {
+		t.Errorf("ErrorMsg %q does not mention host", ae.ErrorMsg)
+	}
+	if !strings.Contains(ae.ErrorMsg, "30s") {
+		t.Errorf("ErrorMsg %q does not mention timeout duration", ae.ErrorMsg)
+	}
+	if strings.Contains(ae.Hint, "may already have been applied") {
+		t.Errorf("read timeout hint should not warn about writes: %q", ae.Hint)
+	}
+	if !strings.Contains(ae.Hint, "JOPLIN_READ_TIMEOUT") {
+		t.Errorf("read timeout hint should mention JOPLIN_READ_TIMEOUT: %q", ae.Hint)
+	}
+}
+
+// TestJoplinTimeout_WriteHint verifies that JoplinTimeout for a write op includes idempotency warning.
+func TestJoplinTimeout_WriteHint(t *testing.T) {
+	ae := JoplinTimeout("localhost", 41184, true, 120*time.Second)
+	if ae == nil {
+		t.Fatal("expected non-nil AgentError")
+	}
+	if !strings.Contains(ae.Hint, "may already have been applied") {
+		t.Errorf("write timeout hint should warn about idempotency: %q", ae.Hint)
+	}
+	if !strings.Contains(ae.Hint, "JOPLIN_WRITE_TIMEOUT") {
+		t.Errorf("write timeout hint should mention JOPLIN_WRITE_TIMEOUT: %q", ae.Hint)
+	}
+}
+
+// TestTimeout_RequestExceedsDeadline verifies that a hung server returns a JoplinTimeout AgentError.
+func TestTimeout_RequestExceedsDeadline(t *testing.T) {
+	// Server that blocks until the client gives up.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Block until the test context is done (client will cancel first).
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	lastColon := strings.LastIndex(addr, ":")
+	host := addr[:lastColon]
+	port, _ := strconv.Atoi(addr[lastColon+1:])
+
+	// Configure a very short read timeout so the test completes quickly.
+	c := NewClient("test-token", host, port, WithReadTimeout(50*time.Millisecond))
+
+	_, err := c.GetNote(context.Background(), "any-id")
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	ae, ok := err.(*AgentError)
+	if !ok {
+		t.Fatalf("expected *AgentError, got %T: %v", err, err)
+	}
+	if !strings.Contains(ae.ErrorMsg, "timed out") {
+		t.Errorf("ErrorMsg %q should mention timed out", ae.ErrorMsg)
+	}
+}
+
+// TestNewClient_VariadicOpts verifies that option defaults can be overridden.
+func TestNewClient_VariadicOpts(t *testing.T) {
+	c := NewClient("tok", "localhost", 41184,
+		WithReadTimeout(5*time.Second),
+		WithWriteTimeout(60*time.Second),
+	)
+	if c.readTimeout != 5*time.Second {
+		t.Errorf("readTimeout = %v, want 5s", c.readTimeout)
+	}
+	if c.writeTimeout != 60*time.Second {
+		t.Errorf("writeTimeout = %v, want 60s", c.writeTimeout)
+	}
+}
+
+// TestNewClient_Defaults verifies that default timeouts are applied when no opts given.
+func TestNewClient_Defaults(t *testing.T) {
+	c := NewClient("tok", "localhost", 41184)
+	if c.readTimeout != 30*time.Second {
+		t.Errorf("default readTimeout = %v, want 30s", c.readTimeout)
+	}
+	if c.writeTimeout != 120*time.Second {
+		t.Errorf("default writeTimeout = %v, want 120s", c.writeTimeout)
 	}
 }
 

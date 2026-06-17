@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/Wickes1/joplin-mcp/joplin"
 	"github.com/Wickes1/joplin-mcp/tools"
@@ -32,6 +33,26 @@ func main() {
 			port = p
 		} else {
 			slog.Warn("invalid JOPLIN_PORT, using default", "value", portStr, "default", port)
+		}
+	}
+
+	const defaultReadTimeoutSec = 30
+	readTimeoutSec := defaultReadTimeoutSec
+	if s := os.Getenv("JOPLIN_READ_TIMEOUT"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			readTimeoutSec = v
+		} else {
+			slog.Warn("invalid JOPLIN_READ_TIMEOUT, using default", "value", s, "default", defaultReadTimeoutSec)
+		}
+	}
+
+	const defaultWriteTimeoutSec = 120
+	writeTimeoutSec := defaultWriteTimeoutSec
+	if s := os.Getenv("JOPLIN_WRITE_TIMEOUT"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			writeTimeoutSec = v
+		} else {
+			slog.Warn("invalid JOPLIN_WRITE_TIMEOUT, using default", "value", s, "default", defaultWriteTimeoutSec)
 		}
 	}
 
@@ -68,7 +89,10 @@ func main() {
 	)
 
 	// --- Joplin client and folder cache ---
-	client := joplin.NewClient(token, host, port)
+	client := joplin.NewClient(token, host, port,
+		joplin.WithReadTimeout(time.Duration(readTimeoutSec)*time.Second),
+		joplin.WithWriteTimeout(time.Duration(writeTimeoutSec)*time.Second),
+	)
 	folderCache := tools.NewFolderCache(client)
 
 	// --- MCP Server ---
