@@ -437,22 +437,22 @@ func sanitizeFilename(name string) string {
 func buildFrontmatter(note *joplin.Note, folderPath string, tags []string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("joplin_id: %q\n", note.ID))
-	sb.WriteString(fmt.Sprintf("title: %q\n", note.Title))
-	sb.WriteString(fmt.Sprintf("folder: %q\n", folderPath))
+	fmt.Fprintf(&sb, "joplin_id: %q\n", note.ID)
+	fmt.Fprintf(&sb, "title: %q\n", note.Title)
+	fmt.Fprintf(&sb, "folder: %q\n", folderPath)
 	if len(tags) > 0 {
 		sb.WriteString("tags:\n")
 		for _, t := range tags {
-			sb.WriteString(fmt.Sprintf("  - %q\n", t))
+			fmt.Fprintf(&sb, "  - %q\n", t)
 		}
 	} else {
 		sb.WriteString("tags: []\n")
 	}
 	if note.CreatedTime > 0 {
-		sb.WriteString(fmt.Sprintf("created: %s\n", time.UnixMilli(note.CreatedTime).UTC().Format(time.RFC3339)))
+		fmt.Fprintf(&sb, "created: %s\n", time.UnixMilli(note.CreatedTime).UTC().Format(time.RFC3339))
 	}
 	if note.UpdatedTime > 0 {
-		sb.WriteString(fmt.Sprintf("updated: %s\n", time.UnixMilli(note.UpdatedTime).UTC().Format(time.RFC3339)))
+		fmt.Fprintf(&sb, "updated: %s\n", time.UnixMilli(note.UpdatedTime).UTC().Format(time.RFC3339))
 	}
 	sb.WriteString("---\n\n")
 	return sb.String()

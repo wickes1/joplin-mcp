@@ -47,7 +47,6 @@ func RegisterBatchTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			g.SetLimit(5)
 
 			for _, id := range args.NoteIDs {
-				id := id
 				g.Go(func() error {
 					_, err := c.UpdateNote(gCtx, id, joplin.NoteUpdateParams{
 						ParentID: joplin.StringPtr(folderID),
@@ -106,7 +105,6 @@ func RegisterBatchTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			g.SetLimit(5)
 
 			for i, id := range args.NoteIDs {
-				i, id := i, id
 				g.Go(func() error {
 					note, err := c.GetNote(gCtx, id)
 					mu.Lock()
@@ -232,7 +230,6 @@ func RegisterBatchTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			g.SetLimit(5)
 
 			for _, id := range args.NoteIDs {
-				id := id
 				g.Go(func() error {
 					var opErr error
 					if action == "add" {

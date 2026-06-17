@@ -137,8 +137,8 @@ func extractMarkdownTitle(body, filePath string) string {
 	for scanner.Scan() && lineCount < 10 {
 		lineCount++
 		line := scanner.Text()
-		if strings.HasPrefix(line, "# ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		if rest, ok := strings.CutPrefix(line, "# "); ok {
+			return strings.TrimSpace(rest)
 		}
 	}
 	// Fallback to filename
