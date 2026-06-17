@@ -186,7 +186,7 @@ func RegisterNoteTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			})
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "update_note", Description: "Update an existing note's title, body, folder, or to-do status. Set append=true to append content instead of replacing. folder_name auto-creates if not found."},
+	mcp.AddTool(s, &mcp.Tool{Name: "update_note", Description: "Update an existing note's title, body, folder, or to-do status. Set append=true to append content instead of replacing. folder_name auto-creates if not found. Warning: append mode performs a non-atomic read-modify-write (GetNote then UpdateNote). Joplin's REST API has no compare-and-swap primitive, so concurrent appends to the same note from multiple clients or processes can silently overwrite each other."},
 		func(ctx context.Context, req *mcp.CallToolRequest, args struct {
 			NoteID     string  `json:"note_id"               jsonschema:"The note ID to update"`
 			Title      *string `json:"title,omitempty"       jsonschema:"New title"`
@@ -204,7 +204,15 @@ func RegisterNoteTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				Title: args.Title,
 			}
 
-			// Handle append mode: read current body, concatenate
+			// Handle append mode: read current body, concatenate.
+			// NOTE: This is a non-atomic read-modify-write. GetNote fetches the
+			// current body and UpdateNote writes the concatenated result, but there
+			// is no compare-and-swap in the Joplin REST API. Concurrent appends to
+			// the same note from separate clients or processes will race: whichever
+			// write lands last wins and the other append is silently lost. An
+			// in-process mutex would not help because it cannot coordinate across
+			// processes. Callers that require strict ordering must serialize appends
+			// externally.
 			if args.Append && args.Body != nil {
 				existing, err := c.GetNote(ctx, args.NoteID)
 				if err != nil {

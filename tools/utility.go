@@ -21,6 +21,23 @@ func RegisterUtilityTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			FolderName string   `json:"folder_name,omitempty"  jsonschema:"Destination folder name (auto-creates if not found)"`
 			TagNames   []string `json:"tag_names,omitempty"    jsonschema:"Tag names to apply (auto-creates missing tags)"`
 		}) (*mcp.CallToolResult, any, error) {
+			// Progress notifications: best-effort, gated on client having sent a token.
+			var importProgressToken any
+			if req != nil && req.Params != nil {
+				importProgressToken = req.Params.GetProgressToken()
+			}
+			notifyImport := func(done int, total int, msg string) {
+				if importProgressToken == nil || req == nil || req.Session == nil {
+					return
+				}
+				_ = req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+					ProgressToken: importProgressToken,
+					Progress:      float64(done),
+					Total:         float64(total),
+					Message:       msg,
+				})
+			}
+
 			if args.FilePath == "" {
 				return toolError("file_path is required", "")
 			}
@@ -61,6 +78,7 @@ func RegisterUtilityTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			}
 
 			// Create note
+			notifyImport(0, 1, "importing")
 			params := joplin.NoteCreateParams{
 				Title:    title,
 				Body:     body,
@@ -75,6 +93,7 @@ func RegisterUtilityTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 
 			slim := note.ToSlim(folderTitle)
 
+			notifyImport(1, 1, "done")
 			return toolSuccess(map[string]any{
 				"note":         slim,
 				"applied_tags": appliedTags,

@@ -1,6 +1,9 @@
 package joplin
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // AgentError is a structured error type with agent-friendly messages.
 // Both ErrorMsg and Hint are surfaced to the LLM via tool result JSON.
@@ -67,6 +70,21 @@ func JoplinForbidden() *AgentError {
 	return &AgentError{
 		ErrorMsg: "Joplin API returned 403 Forbidden.",
 		Hint:     "Check that JOPLIN_TOKEN is set correctly. Find it in Joplin > Preferences > Web Clipper.",
+	}
+}
+
+// JoplinTimeout returns an AgentError when a request deadline is exceeded.
+// isWrite must be true for POST/PUT/DELETE operations: Joplin may have already applied
+// the change even if the client did not receive a response, so the hint warns accordingly.
+func JoplinTimeout(host string, port int, isWrite bool, d time.Duration) *AgentError {
+	msg := fmt.Sprintf("Request to Joplin at %s:%d timed out after %s.", host, port, d)
+	hint := "Joplin may be busy with indexing or rendering. Increase JOPLIN_READ_TIMEOUT and retry."
+	if isWrite {
+		hint = "The write may already have been applied on Joplin. Re-read the note/folder before retrying to avoid duplicates. Increase JOPLIN_WRITE_TIMEOUT if writes consistently time out."
+	}
+	return &AgentError{
+		ErrorMsg: msg,
+		Hint:     hint,
 	}
 }
 

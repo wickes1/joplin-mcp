@@ -24,6 +24,23 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			IncludeMetadata bool   `json:"include_metadata,omitempty"  jsonschema:"Prepend YAML frontmatter with joplin_id, title, folder, tags, created, updated"`
 			Flatten         bool   `json:"flatten,omitempty"           jsonschema:"Write all notes into output_dir without sub-directories"`
 		}) (*mcp.CallToolResult, any, error) {
+			// Progress notifications: best-effort, gated on client having sent a token.
+			var progressToken any
+			if req != nil && req.Params != nil {
+				progressToken = req.Params.GetProgressToken()
+			}
+			notify := func(done int, msg string) {
+				if progressToken == nil || req == nil || req.Session == nil {
+					return
+				}
+				_ = req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+					ProgressToken: progressToken,
+					Progress:      float64(done),
+					Total:         0,
+					Message:       msg,
+				})
+			}
+
 			if args.OutputDir == "" {
 				return toolError("output_dir is required", "")
 			}
@@ -146,6 +163,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 						if n.ParentID == "" {
 							if err := writeNote(n, "", ""); err == nil {
 								exported++
+								notify(exported, n.Title)
 							} else {
 								skipped++
 							}
@@ -177,6 +195,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 						if err := writeNote(n, folderPath, folder.Title); err == nil {
 							exported++
 							folderHadNotes = true
+							notify(exported, folderPath+"/"+n.Title)
 						} else {
 							skipped++
 						}
@@ -209,6 +228,23 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			PreserveStructure *bool    `json:"preserve_structure,omitempty"  jsonschema:"Create Joplin folders matching directory hierarchy (default true)"`
 			TagNames          []string `json:"tag_names,omitempty"           jsonschema:"Tag names to apply to every imported note"`
 		}) (*mcp.CallToolResult, any, error) {
+			// Progress notifications: best-effort, gated on client having sent a token.
+			var batchProgressToken any
+			if req != nil && req.Params != nil {
+				batchProgressToken = req.Params.GetProgressToken()
+			}
+			batchNotify := func(done int, msg string) {
+				if batchProgressToken == nil || req == nil || req.Session == nil {
+					return
+				}
+				_ = req.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+					ProgressToken: batchProgressToken,
+					Progress:      float64(done),
+					Total:         0,
+					Message:       msg,
+				})
+			}
+
 			if args.InputDir == "" {
 				return toolError("input_dir is required", "")
 			}
@@ -365,6 +401,7 @@ func RegisterExportTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 				}
 
 				imported++
+				batchNotify(imported, rel)
 				return nil
 			})
 			if walkErr != nil {
