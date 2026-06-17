@@ -103,7 +103,6 @@ func RegisterNoteTools(s *mcp.Server, c joplin.API, fc *FolderCache) {
 			g.SetLimit(5)
 
 			for i, id := range args.NoteIDs {
-				i, id := i, id
 				g.Go(func() error {
 					note, err := c.GetNote(gCtx, id)
 					mu.Lock()
